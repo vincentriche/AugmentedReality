@@ -64,9 +64,8 @@ public class CheckerboardDetection : MonoBehaviour
 
 			CvInvoke.CvtColor(currentWebcamMat, resultMat, ColorConversion.Bgra2Bgr);
 			CvInvoke.CvtColor(resultMat, grayMat, ColorConversion.Bgra2Gray);
-			VectorOfPoint cornerPoints = DetectCheckerboard(grayMat);
-			if (cornerPoints.Size > 0)
-				DrawCheckerboard(resultMat, cornerPoints);
+			//VectorOfPoint cornerPoints = DetectCheckerboard(grayMat);
+			DetectCheckerboard(grayMat, resultMat);
 
 			handle.Free();
 			resultHandle.Free();
@@ -89,21 +88,22 @@ public class CheckerboardDetection : MonoBehaviour
 		}
 	}
 
-	private VectorOfPoint DetectCheckerboard(Mat image)
+	private void DetectCheckerboard(Mat detectImage, Mat drawImage)
 	{
-		VectorOfPoint cornerPoints = new VectorOfPoint();
-		bool result = CvInvoke.FindChessboardCorners(image, patternSize, cornerPoints);
+		//VectorOfPoint cornerPoints = new VectorOfPoint();
+		//bool result = CvInvoke.FindChessboardCorners(image, patternSize, cornerPoints);
+
+		//if (result == false)
+		//	return new VectorOfPoint();
+
+		Matrix<float> cornerPoints = new Matrix<float>(patternSize);
+		bool result = CvInvoke.FindChessboardCorners(detectImage, patternSize, cornerPoints);
 
 		if (result == false)
-			return new VectorOfPoint();
+			return;
 
+		//CvInvoke.CornerSubPix(image, cornerPoints, new Size(5, 5), new Size(-1, -1), criteria);
+		CvInvoke.DrawChessboardCorners(drawImage, patternSize, cornerPoints, true);
 		Debug.Log(result);
-		return cornerPoints;
-	}
-
-	private void DrawCheckerboard(Mat image, VectorOfPoint cornerPoints)
-	{
-		CvInvoke.CornerSubPix(image, cornerPoints, new Size(5, 5), new Size(-1, -1), criteria);
-		CvInvoke.DrawChessboardCorners(image, patternSize, cornerPoints, true);
 	}
 }
