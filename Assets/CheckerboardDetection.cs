@@ -20,7 +20,8 @@ public class CheckerboardDetection : MonoBehaviour
 	public RawImage rawImageDisplay;
 	public int camNumber = 0;
 	public Camera targetCamera;
-	public float patternScale = 0.21f;
+	public GameObject target;
+	public float patternScale = 1.0f;
 	private Size patternSize = new Size(7, 4);
 	private MCvTermCriteria criteria = new MCvTermCriteria(100, 1e-5);
 	public static WebCamTexture webcamTexture;
@@ -47,14 +48,18 @@ public class CheckerboardDetection : MonoBehaviour
 			webcamTexture.Play();
 		}
 
+		// Set target scale
+		target.transform.localScale = new Vector3(patternScale * (patternSize.Width + 1), patternScale * (patternSize.Height + 1), 1.0f);
+
 		// Construct world corner points
+		Vector2 offset = new Vector2(patternSize.Width / 2.0f * patternScale, patternSize.Height / 2.0f * patternScale);
 		cvWorldCorners = new Matrix<double>(patternSize.Height * patternSize.Width, 1, 3);
 		for (int iy = 0; iy < patternSize.Height; iy++)
 		{
 			for (int ix = 0; ix < patternSize.Width; ix++)
 			{
-				cvWorldCorners.Data[iy * patternSize.Width + ix, 0] = ix * patternScale;
-				cvWorldCorners.Data[iy * patternSize.Width + ix, 1] = iy * patternScale;
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 0] = ix * patternScale - offset.x;
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 1] = iy * patternScale - offset.y;
 				cvWorldCorners.Data[iy * patternSize.Width + ix, 2] = 0;
 			}
 		}
@@ -63,10 +68,10 @@ public class CheckerboardDetection : MonoBehaviour
 		cvIntrinsicParams = new Matrix<double>(3, 3, 1);
 		cvIntrinsicParams[0, 0] = 1.2306403943428504e+03f;
 		cvIntrinsicParams[0, 1] = 0;
-		cvIntrinsicParams[0, 2] = 640;
+		cvIntrinsicParams[0, 2] = (double)webcamTexture.width / 2.0d;
 		cvIntrinsicParams[1, 0] = 0;
 		cvIntrinsicParams[1, 1] = 1.2306403943428504e+03f;
-		cvIntrinsicParams[1, 2] = 480;
+		cvIntrinsicParams[1, 2] = (double)webcamTexture.height / 2.0d;
 		cvIntrinsicParams[2, 0] = 0;
 		cvIntrinsicParams[2, 1] = 0;
 		cvIntrinsicParams[2, 2] = 1;
@@ -168,17 +173,10 @@ public class CheckerboardDetection : MonoBehaviour
 		Mat tempRotation = new Mat(3, 1, DepthType.Cv64F, 1);
 		Mat translationMatrix = new Mat(3, 1, DepthType.Cv64F, 1);
 		bool res = CvInvoke.SolvePnP(cvWorldCorners, cvImageCorners, cvIntrinsicParams, cvDistortionParams, tempRotation, translationMatrix);
+		if (res == false)
+			return;
 
 		// Converte the rotation from 3 axis rotations into a rotation matrix.
-		/*double[] tempRotationData = new double[3];
-		Marshal.Copy(tempRotation.DataPointer, tempRotationData, 0, tempRotation.Width * tempRotation.Height);
-		double tempY = tempRotationData[1];
-		double tempZ = tempRotationData[2];
-		tempRotationData[0] = tempRotationData[0];
-		tempRotationData[1] = tempZ;
-		tempRotationData[2] = tempY;
-		GCHandle tempHandle = GCHandle.Alloc(tempRotationData, GCHandleType.Pinned);
-		tempRotation = new Mat(3, 1, DepthType.Cv64F, 1, tempHandle.AddrOfPinnedObject(), sizeof(double));*/
 		Mat rotationMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
 		CvInvoke.Rodrigues(tempRotation, rotationMatrix);
 		
@@ -189,18 +187,18 @@ public class CheckerboardDetection : MonoBehaviour
 
 		// Turn the intrinsic and extrinsic pramaters into the projection and model/view matrix
 		Matrix4x4 projection = new Matrix4x4();
-		projection.m00 = (float)(2 * cvIntrinsicParams[0, 0] / 640.0d);
+		projection.m00 = (float)(2 * cvIntrinsicParams[0, 0] / (double)webcamTexture.width);
 		projection.m10 = 0;
 		projection.m20 = 0;
 		projection.m30 = 0;
 
 		projection.m01 = 0;
-		projection.m11 = (float)(2 * cvIntrinsicParams[1, 1] / 480.0d);
+		projection.m11 = (float)(2 * cvIntrinsicParams[1, 1] / (double)webcamTexture.height);
 		projection.m21 = 0;
 		projection.m31 = 0;
 
-		projection.m02 = 0;
-		projection.m12 = 0;
+		projection.m02 = (float)(1 - 2 * cvIntrinsicParams[0, 2] / (double)webcamTexture.width);
+		projection.m12 = (float)(-1 + (2 * cvIntrinsicParams[1, 2] + 2) / (double)webcamTexture.height);
 		projection.m22 = (targetCamera.nearClipPlane + targetCamera.farClipPlane) / (targetCamera.nearClipPlane - targetCamera.farClipPlane);
 		projection.m32 = -1;
 
@@ -227,13 +225,14 @@ public class CheckerboardDetection : MonoBehaviour
 		cameraTRS.m32 = 0;
 
 		cameraTRS.m03 = -(float)translationData[0];
-		cameraTRS.m13 = -(float)translationData[2];
-		cameraTRS.m23 = (float)translationData[1];
+		cameraTRS.m13 = (float)translationData[2];
+		cameraTRS.m23 = -(float)translationData[1];
 		cameraTRS.m33 = 1;
 
 		targetCamera.transform.position = ExtractPosition(cameraTRS);
 		targetCamera.transform.rotation = ExtractRotation(cameraTRS);
 		targetCamera.projectionMatrix = projection;
+		targetCamera.fieldOfView = Mathf.Atan(1.0f / projection.m11) * 2.0f * Mathf.Rad2Deg;
 	}
 
 	public Quaternion ExtractRotation(Matrix4x4 matrix)
