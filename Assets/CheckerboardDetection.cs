@@ -146,15 +146,6 @@ public class CheckerboardDetection : MonoBehaviour
 
 		// Initialize intrinsic parameters
 		cvIntrinsicParams = new Matrix<double>(3, 3, 1);
-		/*cvIntrinsicParams[0, 0] = 531.606384f;
-		cvIntrinsicParams[0, 1] = 0;
-		cvIntrinsicParams[0, 2] = 0;
-		cvIntrinsicParams[1, 0] = 0;
-		cvIntrinsicParams[1, 1] = 532.098572f;
-		cvIntrinsicParams[1, 2] = 0;
-		cvIntrinsicParams[2, 0] = 0;
-		cvIntrinsicParams[2, 1] = 0;
-		cvIntrinsicParams[2, 2] = 1;*/
 		cvIntrinsicParams[0, 0] = 1.2306403943428504e+03f;
 		cvIntrinsicParams[0, 1] = 0;
 		cvIntrinsicParams[0, 2] = 640;
@@ -166,10 +157,6 @@ public class CheckerboardDetection : MonoBehaviour
 		cvIntrinsicParams[2, 2] = 1;
 
 		cvDistortionParams = new Matrix<double>(4, 1, 1);
-		/*cvDistortionParams[0, 0] = 0.200448096f;
-		cvDistortionParams[1, 0] = -0.473224431f;
-		cvDistortionParams[2, 0] = 0.0014989496f;
-		cvDistortionParams[3, 0] = 0.00334515143f;*/
 		cvDistortionParams[0, 0] = 1.9920531921963049e-02f;
 		cvDistortionParams[1, 0] = 3.2143454945024297e-02f;
 		cvDistortionParams[2, 0] = 0.0f;
@@ -185,61 +172,59 @@ public class CheckerboardDetection : MonoBehaviour
 		// Converte the rotation from 3 axis rotations into a rotation matrix.
 		Mat rotationMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
 		CvInvoke.Rodrigues(tempRotation, rotationMatrix);
-
-		double[] data = new double[3];
-		Marshal.Copy(tempRotation.DataPointer, data, 0, tempRotation.Width * tempRotation.Height);
-		double[] data2 = new double[9];
-		Marshal.Copy(rotationMatrix.DataPointer, data2, 0, rotationMatrix.Width * rotationMatrix.Height);
-		double[] data3 = new double[3];
-		Marshal.Copy(translationMatrix.DataPointer, data3, 0, translationMatrix.Width * translationMatrix.Height);
+		
+		double[] rotationData = new double[9];
+		Marshal.Copy(rotationMatrix.DataPointer, rotationData, 0, rotationMatrix.Width * rotationMatrix.Height);
+		double[] translationData = new double[3];
+		Marshal.Copy(translationMatrix.DataPointer, translationData, 0, translationMatrix.Width * translationMatrix.Height);
 
 		// Turn the intrinsic and extrinsic pramaters into the projection and model/view matrix
-		/*Matrix4x4 projection = new Matrix4x4();
-		projection.m00 = 2 * calibrationMatrix[0, 0] / 640.0f;
-		projection.m01 = 0;
-		projection.m02 = 0;
-		projection.m03 = 0;
-
+		Matrix4x4 projection = new Matrix4x4();
+		projection.m00 = (float)(2 * cvIntrinsicParams[0, 0] / 640.0d);
 		projection.m10 = 0;
-		projection.m11 = 2 * calibrationMatrix[1, 1] / 480.0f;
-		projection.m12 = 0;
-		projection.m13 = 0;
-
-		projection.m20 = 1 - 2 * calibrationMatrix[0, 2] / 640.0f;
-		projection.m21 = -1 + (2 * calibrationMatrix[1, 2] + 2) / 480.0f;
-		projection.m22 = (targetCamera.nearClipPlane + targetCamera.farClipPlane) / (targetCamera.nearClipPlane - targetCamera.farClipPlane);
-		projection.m23 = -1;
-
+		projection.m20 = 0;
 		projection.m30 = 0;
+
+		projection.m01 = 0;
+		projection.m11 = (float)(2 * cvIntrinsicParams[1, 1] / 480.0d);
+		projection.m21 = 0;
 		projection.m31 = 0;
-		projection.m32 = 2 * (targetCamera.nearClipPlane * targetCamera.farClipPlane) / (targetCamera.nearClipPlane - targetCamera.farClipPlane); ;
+
+		projection.m02 = (float)(1 - 2 * cvIntrinsicParams[0, 2] / 640.0d);
+		projection.m12 = (float)(-1 + (2 * cvIntrinsicParams[1, 2] + 2) / 480.0d);
+		projection.m22 = (targetCamera.nearClipPlane + targetCamera.farClipPlane) / (targetCamera.nearClipPlane - targetCamera.farClipPlane);
+		projection.m32 = -1;
+
+		projection.m03 = 0;
+		projection.m13 = 0;
+		projection.m23 = 2 * (targetCamera.nearClipPlane * targetCamera.farClipPlane) / (targetCamera.nearClipPlane - targetCamera.farClipPlane);
 		projection.m33 = 0;
 
 
 		Matrix4x4 cameraTRS = new Matrix4x4();
-		cameraTRS.m00 = rotationMatrix[0, 0];
-		cameraTRS.m01 = rotationMatrix[1, 0];
-		cameraTRS.m02 = rotationMatrix[2, 0];
-		cameraTRS.m03 = 0;
+		cameraTRS.m00 = (float)rotationData[0 * 3 + 0];
+		cameraTRS.m10 = (float)rotationData[1 * 3 + 0];
+		cameraTRS.m20 = (float)rotationData[2 * 3 + 0];
+		cameraTRS.m30 = 0;
 
-		cameraTRS.m10 = rotationMatrix[0, 1];
-		cameraTRS.m11 = rotationMatrix[1, 1];
-		cameraTRS.m12 = rotationMatrix[2, 1];
-		cameraTRS.m13 = 0;
+		cameraTRS.m01 = (float)rotationData[0 * 3 + 1];
+		cameraTRS.m11 = (float)rotationData[1 * 3 + 1];
+		cameraTRS.m21 = (float)rotationData[2 * 3 + 1];
+		cameraTRS.m31 = 0;
 
-		cameraTRS.m20 = rotationMatrix[0, 2];
-		cameraTRS.m21 = rotationMatrix[1, 2];
-		cameraTRS.m22 = rotationMatrix[2, 2];
-		cameraTRS.m23 = 0;
+		cameraTRS.m02 = (float)rotationData[0 * 3 + 2];
+		cameraTRS.m12 = (float)rotationData[1 * 3 + 2];
+		cameraTRS.m22 = (float)rotationData[2 * 3 + 2];
+		cameraTRS.m32 = 0;
 
-		cameraTRS.m30 = translationMatrix[0, 0];
-		cameraTRS.m31 = translationMatrix[1, 0];
-		cameraTRS.m32 = translationMatrix[2, 0];
+		cameraTRS.m03 = (float)translationData[0];
+		cameraTRS.m13 = (float)translationData[2];
+		cameraTRS.m23 = (float)translationData[1];
 		cameraTRS.m33 = 1;
 
 		targetCamera.transform.position = ExtractPosition(cameraTRS);
 		targetCamera.transform.rotation = ExtractRotation(cameraTRS);
-		targetCamera.projectionMatrix = projection;*/
+		targetCamera.projectionMatrix = projection;
 	}
 
 	public Quaternion ExtractRotation(Matrix4x4 matrix)
