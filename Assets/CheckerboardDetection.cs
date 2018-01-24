@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
+using UnityEngine.UI;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -16,17 +17,18 @@ using Emgu.CV.Structure;
 
 public class CheckerboardDetection : MonoBehaviour
 {
-	public GameObject screen;
+	public RawImage rawImageDisplay;
+	public int camNumber = 0;
 	public Camera targetCamera;
+	public float patternScale = 0.21f;
 	private Size patternSize = new Size(7, 4);
-	private float patternScale = 1.0f;
 	private MCvTermCriteria criteria = new MCvTermCriteria(100, 1e-5);
 	public static WebCamTexture webcamTexture;
 	private static Texture2D displayTexture;
 	private Color32[] data;
 	private byte[] bytes;
 	private byte[] grayBytes;
-	private FlipType flip = FlipType.Horizontal;
+	private FlipType flip = FlipType.None;
 	
 	private Matrix<float> cvImageCorners;
 	private Matrix<double> cvWorldCorners;
@@ -41,9 +43,39 @@ public class CheckerboardDetection : MonoBehaviour
 
 		if (cameraCount > 0)
 		{
-			webcamTexture = new WebCamTexture(devices[0].name);
+			webcamTexture = new WebCamTexture(devices[camNumber].name);
 			webcamTexture.Play();
 		}
+
+		// Construct world corner points
+		cvWorldCorners = new Matrix<double>(patternSize.Height * patternSize.Width, 1, 3);
+		for (int iy = 0; iy < patternSize.Height; iy++)
+		{
+			for (int ix = 0; ix < patternSize.Width; ix++)
+			{
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 0] = ix * patternScale;
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 1] = iy * patternScale;
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 2] = 0;
+			}
+		}
+
+		// Initialize intrinsic parameters
+		cvIntrinsicParams = new Matrix<double>(3, 3, 1);
+		cvIntrinsicParams[0, 0] = 1.2306403943428504e+03f;
+		cvIntrinsicParams[0, 1] = 0;
+		cvIntrinsicParams[0, 2] = 640;
+		cvIntrinsicParams[1, 0] = 0;
+		cvIntrinsicParams[1, 1] = 1.2306403943428504e+03f;
+		cvIntrinsicParams[1, 2] = 480;
+		cvIntrinsicParams[2, 0] = 0;
+		cvIntrinsicParams[2, 1] = 0;
+		cvIntrinsicParams[2, 2] = 1;
+
+		cvDistortionParams = new Matrix<double>(4, 1, 1);
+		cvDistortionParams[0, 0] = 1.9920531921963049e-02f;
+		cvDistortionParams[1, 0] = 3.2143454945024297e-02f;
+		cvDistortionParams[2, 0] = 0.0f;
+		cvDistortionParams[3, 0] = 0.0f;
 	}
 
 	void OnDestroy()
@@ -100,7 +132,7 @@ public class CheckerboardDetection : MonoBehaviour
 
 		if (displayTexture != null)
 		{
-			screen.GetComponent<MeshRenderer>().sharedMaterial.SetTexture("_MainTex", displayTexture);
+			rawImageDisplay.texture = displayTexture;
 		}
 	}
 
@@ -121,17 +153,6 @@ public class CheckerboardDetection : MonoBehaviour
 
 	private void SetCameraTransformFromChessboard()
 	{
-		// Construct world corner points
-		cvWorldCorners = new Matrix<double>(patternSize.Height * patternSize.Width, 1, 3);
-		for (int iy = 0; iy < patternSize.Height; iy++)
-		{
-			for (int ix = 0; ix < patternSize.Width; ix++)
-			{
-				cvWorldCorners.Data[iy * patternSize.Width + ix, 0] = ix * patternScale;
-				cvWorldCorners.Data[iy * patternSize.Width + ix, 1] = iy * patternScale;
-				cvWorldCorners.Data[iy * patternSize.Width + ix, 2] = 0;
-			}
-		}
 		Matrix<float>[] split = cvImageCorners.Split();
 		Matrix<double> doubleCvImageCorners = new Matrix<double>(patternSize.Height * patternSize.Width, 1, 2);
 		for (int iy = 0; iy < patternSize.Height; iy++)
@@ -142,29 +163,8 @@ public class CheckerboardDetection : MonoBehaviour
 				doubleCvImageCorners.Data[iy * patternSize.Width + ix, 1] = split[1][iy * patternSize.Width + ix, 0];
 			}
 		}
-		
-
-		// Initialize intrinsic parameters
-		cvIntrinsicParams = new Matrix<double>(3, 3, 1);
-		cvIntrinsicParams[0, 0] = 1.2306403943428504e+03f;
-		cvIntrinsicParams[0, 1] = 0;
-		cvIntrinsicParams[0, 2] = 640;
-		cvIntrinsicParams[1, 0] = 0;
-		cvIntrinsicParams[1, 1] = 1.2306403943428504e+03f;
-		cvIntrinsicParams[1, 2] = 480;
-		cvIntrinsicParams[2, 0] = 0;
-		cvIntrinsicParams[2, 1] = 0;
-		cvIntrinsicParams[2, 2] = 1;
-
-		cvDistortionParams = new Matrix<double>(4, 1, 1);
-		cvDistortionParams[0, 0] = 1.9920531921963049e-02f;
-		cvDistortionParams[1, 0] = 3.2143454945024297e-02f;
-		cvDistortionParams[2, 0] = 0.0f;
-		cvDistortionParams[3, 0] = 0.0f;
 
 		// Compute the rotation / translation of the chessboard (the cameras extrinsic pramaters)
-		//Matrix<float> tempRotation = new Matrix<float>(3, 1, 1);
-		//Matrix<float> translationMatrix = new Matrix<float>(3, 1, 1);
 		Mat tempRotation = new Mat(3, 1, DepthType.Cv64F, 1);
 		Mat translationMatrix = new Mat(3, 1, DepthType.Cv64F, 1);
 		bool res = CvInvoke.SolvePnP(cvWorldCorners, cvImageCorners, cvIntrinsicParams, cvDistortionParams, tempRotation, translationMatrix);
@@ -207,19 +207,19 @@ public class CheckerboardDetection : MonoBehaviour
 		cameraTRS.m20 = (float)rotationData[2 * 3 + 0];
 		cameraTRS.m30 = 0;
 
-		cameraTRS.m01 = (float)rotationData[0 * 3 + 1];
-		cameraTRS.m11 = (float)rotationData[1 * 3 + 1];
-		cameraTRS.m21 = (float)rotationData[2 * 3 + 1];
+		cameraTRS.m01 = (float)rotationData[0 * 3 + 2];
+		cameraTRS.m11 = (float)rotationData[1 * 3 + 2];
+		cameraTRS.m21 = (float)rotationData[2 * 3 + 2];
 		cameraTRS.m31 = 0;
 
-		cameraTRS.m02 = (float)rotationData[0 * 3 + 2];
-		cameraTRS.m12 = (float)rotationData[1 * 3 + 2];
-		cameraTRS.m22 = (float)rotationData[2 * 3 + 2];
+		cameraTRS.m02 = (float)rotationData[0 * 3 + 1];
+		cameraTRS.m12 = (float)rotationData[1 * 3 + 1];
+		cameraTRS.m22 = (float)rotationData[2 * 3 + 1];
 		cameraTRS.m32 = 0;
 
-		cameraTRS.m03 = (float)translationData[0];
+		cameraTRS.m03 = -(float)translationData[0];
 		cameraTRS.m13 = (float)translationData[2];
-		cameraTRS.m23 = (float)translationData[1];
+		cameraTRS.m23 = -(float)translationData[1];
 		cameraTRS.m33 = 1;
 
 		targetCamera.transform.position = ExtractPosition(cameraTRS);
