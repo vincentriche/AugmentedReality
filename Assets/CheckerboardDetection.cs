@@ -29,9 +29,9 @@ public class CheckerboardDetection : MonoBehaviour
 	private FlipType flip = FlipType.Horizontal;
 	
 	private Matrix<float> cvImageCorners;
-	private Matrix<float> cvWorldCorners;
-	private Matrix<float> cvIntrinsicParams;
-	private Matrix<float> cvDistortionParams;
+	private Matrix<double> cvWorldCorners;
+	private Matrix<double> cvIntrinsicParams;
+	private Matrix<double> cvDistortionParams;
 
 
 	void Start()
@@ -122,64 +122,76 @@ public class CheckerboardDetection : MonoBehaviour
 	private void SetCameraTransformFromChessboard()
 	{
 		// Construct world corner points
-		cvWorldCorners = new Matrix<float>(patternSize.Height * patternSize.Width, 1, 3);
+		cvWorldCorners = new Matrix<double>(patternSize.Height * patternSize.Width, 1, 3);
 		for (int iy = 0; iy < patternSize.Height; iy++)
 		{
 			for (int ix = 0; ix < patternSize.Width; ix++)
 			{
-				cvWorldCorners[iy * patternSize.Width * 3 + ix, 0] = ix * patternScale;
-				cvWorldCorners[iy * patternSize.Width * 3 + ix, 0] = iy * patternScale;
-				cvWorldCorners[iy * patternSize.Width * 3 + ix, 0] = 0;
-			}
-		}
-		Matrix<float> flatCvWorldCorners = new Matrix<float>(patternSize.Height * patternSize.Width * 3, 1, 1);
-		for (int iy = 0; iy < patternSize.Height; iy++)
-		{
-			for (int ix = 0; ix < patternSize.Width; ix++)
-			{
-				cvWorldCorners[iy * patternSize.Width * 3 + ix * 3 + 0, 0] = ix * patternScale;
-				cvWorldCorners[iy * patternSize.Width * 3 + ix * 3 + 1, 0] = iy * patternScale;
-				cvWorldCorners[iy * patternSize.Width * 3 + ix * 3 + 2, 0] = 0;
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 0] = ix * patternScale;
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 1] = iy * patternScale;
+				cvWorldCorners.Data[iy * patternSize.Width + ix, 2] = 0;
 			}
 		}
 		Matrix<float>[] split = cvImageCorners.Split();
-		Matrix<float> flatCvImageCorners = new Matrix<float>(patternSize.Height * patternSize.Width * 2, 1, 1);
+		Matrix<double> doubleCvImageCorners = new Matrix<double>(patternSize.Height * patternSize.Width, 1, 2);
 		for (int iy = 0; iy < patternSize.Height; iy++)
 		{
 			for (int ix = 0; ix < patternSize.Width; ix++)
 			{
-				flatCvImageCorners[iy * patternSize.Width * 2 + ix * 2 + 0, 0] = split[0][iy * patternSize.Width + ix, 0];
-				flatCvImageCorners[iy * patternSize.Width * 2 + ix * 2 + 1, 0] = split[1][iy * patternSize.Width + ix, 0];
+				doubleCvImageCorners.Data[iy * patternSize.Width + ix, 0] = split[0][iy * patternSize.Width + ix, 0];
+				doubleCvImageCorners.Data[iy * patternSize.Width + ix, 1] = split[1][iy * patternSize.Width + ix, 0];
 			}
 		}
+		
 
 		// Initialize intrinsic parameters
-		cvIntrinsicParams = new Matrix<float>(3, 3, 1);
-		cvIntrinsicParams[0, 0] = 1.2306403943428504e+03F;
+		cvIntrinsicParams = new Matrix<double>(3, 3, 1);
+		/*cvIntrinsicParams[0, 0] = 531.606384f;
+		cvIntrinsicParams[0, 1] = 0;
+		cvIntrinsicParams[0, 2] = 0;
+		cvIntrinsicParams[1, 0] = 0;
+		cvIntrinsicParams[1, 1] = 532.098572f;
+		cvIntrinsicParams[1, 2] = 0;
+		cvIntrinsicParams[2, 0] = 0;
+		cvIntrinsicParams[2, 1] = 0;
+		cvIntrinsicParams[2, 2] = 1;*/
+		cvIntrinsicParams[0, 0] = 1.2306403943428504e+03f;
 		cvIntrinsicParams[0, 1] = 0;
 		cvIntrinsicParams[0, 2] = 640;
 		cvIntrinsicParams[1, 0] = 0;
-		cvIntrinsicParams[1, 1] = 1.2306403943428504e+03F;
+		cvIntrinsicParams[1, 1] = 1.2306403943428504e+03f;
 		cvIntrinsicParams[1, 2] = 480;
 		cvIntrinsicParams[2, 0] = 0;
 		cvIntrinsicParams[2, 1] = 0;
 		cvIntrinsicParams[2, 2] = 1;
 
-		cvDistortionParams = new Matrix<float>(4, 1, 1);
-		cvDistortionParams[0, 0] = 1.9920531921963049e-02F;
-		cvDistortionParams[1, 0] = 3.2143454945024297e-02F;
-		cvDistortionParams[2, 0] = 0;
-		cvDistortionParams[3, 0] = 0;
+		cvDistortionParams = new Matrix<double>(4, 1, 1);
+		/*cvDistortionParams[0, 0] = 0.200448096f;
+		cvDistortionParams[1, 0] = -0.473224431f;
+		cvDistortionParams[2, 0] = 0.0014989496f;
+		cvDistortionParams[3, 0] = 0.00334515143f;*/
+		cvDistortionParams[0, 0] = 1.9920531921963049e-02f;
+		cvDistortionParams[1, 0] = 3.2143454945024297e-02f;
+		cvDistortionParams[2, 0] = 0.0f;
+		cvDistortionParams[3, 0] = 0.0f;
 
 		// Compute the rotation / translation of the chessboard (the cameras extrinsic pramaters)
-		Matrix<float> tempRotation = new Matrix<float>(3, 1, 1);
-		Matrix<float> translationMatrix = new Matrix<float>(3, 1, 1);
-		CvInvoke.SolvePnP(flatCvWorldCorners, cvImageCorners, cvIntrinsicParams, cvDistortionParams, tempRotation, translationMatrix);
+		//Matrix<float> tempRotation = new Matrix<float>(3, 1, 1);
+		//Matrix<float> translationMatrix = new Matrix<float>(3, 1, 1);
+		Mat tempRotation = new Mat(3, 1, DepthType.Cv64F, 1);
+		Mat translationMatrix = new Mat(3, 1, DepthType.Cv64F, 1);
+		bool res = CvInvoke.SolvePnP(cvWorldCorners, cvImageCorners, cvIntrinsicParams, cvDistortionParams, tempRotation, translationMatrix);
 
 		// Converte the rotation from 3 axis rotations into a rotation matrix.
-		Matrix<float> rotationMatrix = new Matrix<float>(3, 3, 1);
+		Mat rotationMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
 		CvInvoke.Rodrigues(tempRotation, rotationMatrix);
-		
+
+		double[] data = new double[3];
+		Marshal.Copy(tempRotation.DataPointer, data, 0, tempRotation.Width * tempRotation.Height);
+		double[] data2 = new double[9];
+		Marshal.Copy(rotationMatrix.DataPointer, data2, 0, rotationMatrix.Width * rotationMatrix.Height);
+		double[] data3 = new double[3];
+		Marshal.Copy(translationMatrix.DataPointer, data3, 0, translationMatrix.Width * translationMatrix.Height);
 
 		// Turn the intrinsic and extrinsic pramaters into the projection and model/view matrix
 		/*Matrix4x4 projection = new Matrix4x4();
