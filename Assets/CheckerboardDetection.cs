@@ -170,6 +170,15 @@ public class CheckerboardDetection : MonoBehaviour
 		bool res = CvInvoke.SolvePnP(cvWorldCorners, cvImageCorners, cvIntrinsicParams, cvDistortionParams, tempRotation, translationMatrix);
 
 		// Converte the rotation from 3 axis rotations into a rotation matrix.
+		/*double[] tempRotationData = new double[3];
+		Marshal.Copy(tempRotation.DataPointer, tempRotationData, 0, tempRotation.Width * tempRotation.Height);
+		double tempY = tempRotationData[1];
+		double tempZ = tempRotationData[2];
+		tempRotationData[0] = tempRotationData[0];
+		tempRotationData[1] = tempZ;
+		tempRotationData[2] = tempY;
+		GCHandle tempHandle = GCHandle.Alloc(tempRotationData, GCHandleType.Pinned);
+		tempRotation = new Mat(3, 1, DepthType.Cv64F, 1, tempHandle.AddrOfPinnedObject(), sizeof(double));*/
 		Mat rotationMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
 		CvInvoke.Rodrigues(tempRotation, rotationMatrix);
 		
@@ -190,8 +199,8 @@ public class CheckerboardDetection : MonoBehaviour
 		projection.m21 = 0;
 		projection.m31 = 0;
 
-		projection.m02 = (float)(1 - 2 * cvIntrinsicParams[0, 2] / 640.0d);
-		projection.m12 = (float)(-1 + (2 * cvIntrinsicParams[1, 2] + 2) / 480.0d);
+		projection.m02 = 0;
+		projection.m12 = 0;
 		projection.m22 = (targetCamera.nearClipPlane + targetCamera.farClipPlane) / (targetCamera.nearClipPlane - targetCamera.farClipPlane);
 		projection.m32 = -1;
 
@@ -202,24 +211,24 @@ public class CheckerboardDetection : MonoBehaviour
 
 
 		Matrix4x4 cameraTRS = new Matrix4x4();
-		cameraTRS.m00 = (float)rotationData[0 * 3 + 0];
-		cameraTRS.m10 = (float)rotationData[1 * 3 + 0];
-		cameraTRS.m20 = (float)rotationData[2 * 3 + 0];
+		cameraTRS.m00 = -(float)rotationData[0 * 3 + 0];
+		cameraTRS.m10 = -(float)rotationData[2 * 3 + 0];
+		cameraTRS.m20 = -(float)rotationData[1 * 3 + 0];
 		cameraTRS.m30 = 0;
 
-		cameraTRS.m01 = (float)rotationData[0 * 3 + 2];
-		cameraTRS.m11 = (float)rotationData[1 * 3 + 2];
-		cameraTRS.m21 = (float)rotationData[2 * 3 + 2];
+		cameraTRS.m01 = -(float)rotationData[0 * 3 + 1];
+		cameraTRS.m11 = -(float)rotationData[2 * 3 + 1];
+		cameraTRS.m21 = -(float)rotationData[1 * 3 + 1];
 		cameraTRS.m31 = 0;
 
-		cameraTRS.m02 = (float)rotationData[0 * 3 + 1];
-		cameraTRS.m12 = (float)rotationData[1 * 3 + 1];
-		cameraTRS.m22 = (float)rotationData[2 * 3 + 1];
+		cameraTRS.m02 = -(float)rotationData[0 * 3 + 2];
+		cameraTRS.m12 = -(float)rotationData[2 * 3 + 2];
+		cameraTRS.m22 = -(float)rotationData[1 * 3 + 2];
 		cameraTRS.m32 = 0;
 
 		cameraTRS.m03 = -(float)translationData[0];
-		cameraTRS.m13 = (float)translationData[2];
-		cameraTRS.m23 = -(float)translationData[1];
+		cameraTRS.m13 = -(float)translationData[2];
+		cameraTRS.m23 = (float)translationData[1];
 		cameraTRS.m33 = 1;
 
 		targetCamera.transform.position = ExtractPosition(cameraTRS);
