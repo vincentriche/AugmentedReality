@@ -177,9 +177,16 @@ public class CheckerboardDetection : MonoBehaviour
 			return;
 
 		// Converte the rotation from 3 axis rotations into a rotation matrix.
+		double[] tempRotationData = new double[3];
+		Marshal.Copy(tempRotation.DataPointer, tempRotationData, 0, tempRotation.Width * tempRotation.Height);
+		tempRotationData[0] = tempRotationData[0];
+		tempRotationData[1] = -tempRotationData[1];
+		tempRotationData[2] = -tempRotationData[2];
+		GCHandle tempHandle = GCHandle.Alloc(tempRotationData, GCHandleType.Pinned);
+		tempRotation = new Mat(3, 1, DepthType.Cv64F, 1, tempHandle.AddrOfPinnedObject(), sizeof(double));
 		Mat rotationMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
 		CvInvoke.Rodrigues(tempRotation, rotationMatrix);
-		
+
 		double[] rotationData = new double[9];
 		Marshal.Copy(rotationMatrix.DataPointer, rotationData, 0, rotationMatrix.Width * rotationMatrix.Height);
 		double[] translationData = new double[3];
@@ -207,64 +214,143 @@ public class CheckerboardDetection : MonoBehaviour
 		projection.m23 = 2 * (targetCamera.nearClipPlane * targetCamera.farClipPlane) / (targetCamera.nearClipPlane - targetCamera.farClipPlane);
 		projection.m33 = 0;
 
-
-		Matrix4x4 cameraTRS = new Matrix4x4();
-		cameraTRS.m00 = -(float)rotationData[0 * 3 + 0];
-		cameraTRS.m10 = -(float)rotationData[2 * 3 + 0];
-		cameraTRS.m20 = -(float)rotationData[1 * 3 + 0];
-		cameraTRS.m30 = 0;
-
-		cameraTRS.m01 = -(float)rotationData[0 * 3 + 1];
-		cameraTRS.m11 = -(float)rotationData[2 * 3 + 1];
-		cameraTRS.m21 = -(float)rotationData[1 * 3 + 1];
-		cameraTRS.m31 = 0;
-
-		cameraTRS.m02 = -(float)rotationData[0 * 3 + 2];
-		cameraTRS.m12 = -(float)rotationData[2 * 3 + 2];
-		cameraTRS.m22 = -(float)rotationData[1 * 3 + 2];
-		cameraTRS.m32 = 0;
-
-		cameraTRS.m03 = -(float)translationData[0];
-		cameraTRS.m13 = (float)translationData[2];
-		cameraTRS.m23 = -(float)translationData[1];
-		cameraTRS.m33 = 1;
-
-		targetCamera.transform.position = ExtractPosition(cameraTRS);
-		targetCamera.transform.rotation = ExtractRotation(cameraTRS);
 		targetCamera.projectionMatrix = projection;
 		targetCamera.fieldOfView = Mathf.Atan(1.0f / projection.m11) * 2.0f * Mathf.Rad2Deg;
+		targetCamera.aspect = (float)webcamTexture.width / (float)webcamTexture.height;
+
+
+		Matrix4x4 cvModelView = new Matrix4x4();
+		cvModelView.m00 = (float)rotationData[0 * 3 + 0];
+		cvModelView.m10 = (float)rotationData[1 * 3 + 0];
+		cvModelView.m20 = (float)rotationData[2 * 3 + 0];
+		cvModelView.m30 = 0;
+
+		cvModelView.m01 = (float)rotationData[0 * 3 + 1];
+		cvModelView.m11 = (float)rotationData[1 * 3 + 1];
+		cvModelView.m21 = (float)rotationData[2 * 3 + 1];
+		cvModelView.m31 = 0;
+
+		cvModelView.m02 = (float)rotationData[0 * 3 + 2];
+		cvModelView.m12 = (float)rotationData[1 * 3 + 2];
+		cvModelView.m22 = (float)rotationData[2 * 3 + 2];
+		cvModelView.m32 = 0;
+
+		cvModelView.m03 = (float)translationData[0];
+		cvModelView.m13 = (float)translationData[1];
+		cvModelView.m23 = (float)translationData[2];
+		cvModelView.m33 = 1;
+		cvModelView = cvModelView.inverse;
+
+		/*Vector3 camPos = Vector3.zero;
+		Quaternion camRot = Quaternion.identity;
+		ExtractCameraTRS(cvModelView, out camPos, out camRot);*/
+		//cvModelView = InvertModelView(cvModelView);
+		targetCamera.transform.position = ExtractPositionOpenCV(cvModelView);
+		targetCamera.transform.rotation = ExtractRotationOpenCV(cvModelView);
 	}
 
-	public Quaternion ExtractRotation(Matrix4x4 matrix)
+	public Quaternion ExtractRotationOpenCV(Matrix4x4 matrix)
 	{
 		Vector3 forward;
 		forward.x = matrix.m02;
-		forward.y = matrix.m12;
+		forward.y = -matrix.m12;
 		forward.z = matrix.m22;
 
 		Vector3 upwards;
 		upwards.x = matrix.m01;
-		upwards.y = matrix.m11;
+		upwards.y = -matrix.m11;
 		upwards.z = matrix.m21;
 
 		return Quaternion.LookRotation(forward, upwards);
 	}
 
-	public Vector3 ExtractPosition(Matrix4x4 matrix)
+	public Vector3 ExtractPositionOpenCV(Matrix4x4 matrix)
 	{
 		Vector3 position;
 		position.x = matrix.m03;
-		position.y = matrix.m13;
+		position.y = -matrix.m13;
 		position.z = matrix.m23;
 		return position;
 	}
 
-	public Vector3 ExtractScale(Matrix4x4 matrix)
+	/*public void ExtractCameraTRS(Matrix4x4 matrix, out Vector3 pos, out Quaternion rot)
 	{
-		Vector3 scale;
-		scale.x = new Vector4(matrix.m00, matrix.m10, matrix.m20, matrix.m30).magnitude;
-		scale.y = new Vector4(matrix.m01, matrix.m11, matrix.m21, matrix.m31).magnitude;
-		scale.z = new Vector4(matrix.m02, matrix.m12, matrix.m22, matrix.m32).magnitude;
-		return scale;
+		Matrix4x4 rotation = matrix;
+		rotation.m03 = 0;
+		rotation.m13 = 0;
+		rotation.m23 = 0;
+		rotation = rotation.transpose;
+		Vector4 temp = rotation.GetRow(1);
+		rotation.SetRow(1, rotation.GetRow(2));
+		rotation.SetRow(2, temp);
+
+		Vector3 forward;
+		forward.x = rotation.m02;
+		forward.y = rotation.m12;
+		forward.z = rotation.m22;
+		Vector3 upwards;
+		upwards.x = rotation.m01;
+		upwards.y = rotation.m11;
+		upwards.z = rotation.m21;
+		rot = Quaternion.LookRotation(forward, upwards);
+		rot = rot * Quaternion.AngleAxis(90, Vector3.right);
+		rotation = Matrix4x4.TRS(Vector3.zero, rot, Vector3.one);
+
+		Vector3 position;
+		position.x = matrix.m03;
+		position.y = matrix.m13;
+		position.z = matrix.m23;
+
+		Matrix4x4 negativeMatrix = Matrix4x4.identity;
+		negativeMatrix.m00 = -1;
+		negativeMatrix.m11 = -1;
+		negativeMatrix.m22 = -1;
+		negativeMatrix.m33 = -1;
+		pos = negativeMatrix * rotation * position;
+	}*/
+
+	public Matrix4x4 InvertModelView(Matrix4x4 matrix)
+	{
+		Matrix4x4 negativeMatrix = Matrix4x4.identity;
+		negativeMatrix.m00 = -1;
+		negativeMatrix.m11 = -1;
+		negativeMatrix.m22 = -1;
+		negativeMatrix.m33 = -1;
+
+		Matrix4x4 rotation = matrix;
+		rotation.m03 = 0;
+		rotation.m13 = 0;
+		rotation.m23 = 0;
+		rotation = rotation.transpose;
+
+		Vector3 position;
+		position.x = matrix.m03;
+		position.y = matrix.m13;
+		position.z = matrix.m23;
+		position = (negativeMatrix * rotation) * position;
+
+		Matrix4x4 result;
+		result.m00 = rotation.m00;
+		result.m10 = rotation.m10;
+		result.m20 = rotation.m20;
+		result.m30 = 0;
+
+		result.m01 = rotation.m01;
+		result.m11 = rotation.m11;
+		result.m21 = rotation.m21;
+		result.m31 = 0;
+
+		result.m02 = rotation.m02;
+		result.m12 = rotation.m12;
+		result.m22 = rotation.m22;
+		result.m32 = 0;
+
+		result.m03 = position.x;
+		result.m13 = position.y;
+		result.m23 = position.z;
+		result.m33 = 1;
+		return result;
+
+		//return matrix.inverse;
 	}
 }
