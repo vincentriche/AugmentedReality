@@ -27,21 +27,10 @@ public class CheckerboardDetection : MonoBehaviour
 	private byte[] bytes;
 	private byte[] grayBytes;
 	private FlipType flip = FlipType.Horizontal;
-
-	private PointF[] imageCorners;
-	private GCHandle imageCornersHandle;
+	
 	private Matrix<float> cvImageCorners;
-
-	private MCvPoint3D32f[] worldCornerPoints;
-	private GCHandle worldCornersHandle;
 	private Matrix<float> cvWorldCorners;
-
-	private float[] intrinsicParams;
-	private GCHandle intrinsicParamsHandle;
 	private Matrix<float> cvIntrinsicParams;
-
-	private float[] distortionParams;
-	private GCHandle distortionParamsHandle;
 	private Matrix<float> cvDistortionParams;
 
 
@@ -55,57 +44,10 @@ public class CheckerboardDetection : MonoBehaviour
 			webcamTexture = new WebCamTexture(devices[0].name);
 			webcamTexture.Play();
 		}
-		
-		// Construct world corner points
-		worldCornerPoints = new MCvPoint3D32f[patternSize.Height * patternSize.Width];
-		for (int ix = 0; ix < patternSize.Height; ix++)
-			for (int iy = 0; iy < patternSize.Width; iy++)
-				worldCornerPoints[iy * patternSize.Height + ix] = new MCvPoint3D32f(iy * patternScale, ix * patternScale, 0);
-		worldCornersHandle = GCHandle.Alloc(worldCornerPoints, GCHandleType.Pinned);
-		cvWorldCorners = new Matrix<float>(worldCornerPoints.Length, 1, 3, worldCornersHandle.AddrOfPinnedObject(), 3 * sizeof(float));
-
-		imageCorners = new PointF[patternSize.Width * patternSize.Height];
-		imageCornersHandle = GCHandle.Alloc(imageCorners, GCHandleType.Pinned);
-		cvImageCorners = new Matrix<float>(imageCorners.Length, 1, 2, imageCornersHandle.AddrOfPinnedObject(), 2 * sizeof(float));
-
-		// Initialize intrinsic parameters
-		intrinsicParams = new float[9];
-		intrinsicParams[0] = 1.2306403943428504e+03F;
-		intrinsicParams[1] = 0;
-		intrinsicParams[2] = 640;
-		intrinsicParams[3] = 0;
-		intrinsicParams[4] = 1.2306403943428504e+03F;
-		intrinsicParams[5] = 480;
-		intrinsicParams[6] = 0;
-		intrinsicParams[7] = 0;
-		intrinsicParams[8] = 1;
-		/*intrinsicParams[0] = 1.2306403943428504e+03F;
-		intrinsicParams[3] = 0;
-		intrinsicParams[6] = 640;
-		intrinsicParams[1] = 0;
-		intrinsicParams[4] = 1.2306403943428504e+03F;
-		intrinsicParams[7] = 480;
-		intrinsicParams[2] = 0;
-		intrinsicParams[5] = 0;
-		intrinsicParams[8] = 1;*/
-		intrinsicParamsHandle = GCHandle.Alloc(intrinsicParams, GCHandleType.Pinned);
-		cvIntrinsicParams = new Matrix<float>(3, 3, 1, intrinsicParamsHandle.AddrOfPinnedObject(), sizeof(float) * 3);
-
-		distortionParams = new float[4];
-		distortionParams[0] = 1.9920531921963049e-02F;
-		distortionParams[1] = 3.2143454945024297e-02F;
-		distortionParams[2] = 0;
-		distortionParams[3] = 0;
-		distortionParamsHandle = GCHandle.Alloc(distortionParams, GCHandleType.Pinned);
-		cvDistortionParams = new Matrix<float>(distortionParams.Length, 1, 1, distortionParamsHandle.AddrOfPinnedObject(), sizeof(float));
 	}
 
 	void OnDestroy()
 	{
-		imageCornersHandle.Free();
-		worldCornersHandle.Free();
-		intrinsicParamsHandle.Free();
-		distortionParamsHandle.Free();
 	}
 
 	void Update()
@@ -136,6 +78,7 @@ public class CheckerboardDetection : MonoBehaviour
 			CvInvoke.CvtColor(currentWebcamMat, resultMat, ColorConversion.Bgra2Bgr);
 			CvInvoke.CvtColor(resultMat, grayMat, ColorConversion.Bgra2Gray);
 			
+			cvImageCorners = new Matrix<float>(patternSize.Width * patternSize.Height, 1, 2);
 			bool detected = DetectCheckerboard(grayMat, resultMat);
 			if (detected == true)
 				SetCameraTransformFromChessboard();
@@ -178,26 +121,65 @@ public class CheckerboardDetection : MonoBehaviour
 
 	private void SetCameraTransformFromChessboard()
 	{
-		float[] rotData = new float[3];
-		GCHandle rotHandle = GCHandle.Alloc(rotData, GCHandleType.Pinned);
-		Matrix<float> tempRotation = new Matrix<float>(3, 1, 1, rotHandle.AddrOfPinnedObject(), sizeof(float));
-		float[] posData = new float[3];
-		GCHandle posHandle = GCHandle.Alloc(rotData, GCHandleType.Pinned);
-		Matrix<float> translationMatrix = new Matrix<float>(3, 1, 1, posHandle.AddrOfPinnedObject(), sizeof(float));
+		// Construct world corner points
+		cvWorldCorners = new Matrix<float>(patternSize.Height * patternSize.Width, 1, 3);
+		for (int iy = 0; iy < patternSize.Height; iy++)
+		{
+			for (int ix = 0; ix < patternSize.Width; ix++)
+			{
+				cvWorldCorners[iy * patternSize.Width * 3 + ix, 0] = ix * patternScale;
+				cvWorldCorners[iy * patternSize.Width * 3 + ix, 0] = iy * patternScale;
+				cvWorldCorners[iy * patternSize.Width * 3 + ix, 0] = 0;
+			}
+		}
+		Matrix<float> flatCvWorldCorners = new Matrix<float>(patternSize.Height * patternSize.Width * 3, 1, 1);
+		for (int iy = 0; iy < patternSize.Height; iy++)
+		{
+			for (int ix = 0; ix < patternSize.Width; ix++)
+			{
+				cvWorldCorners[iy * patternSize.Width * 3 + ix * 3 + 0, 0] = ix * patternScale;
+				cvWorldCorners[iy * patternSize.Width * 3 + ix * 3 + 1, 0] = iy * patternScale;
+				cvWorldCorners[iy * patternSize.Width * 3 + ix * 3 + 2, 0] = 0;
+			}
+		}
+		Matrix<float>[] split = cvImageCorners.Split();
+		Matrix<float> flatCvImageCorners = new Matrix<float>(patternSize.Height * patternSize.Width * 2, 1, 1);
+		for (int iy = 0; iy < patternSize.Height; iy++)
+		{
+			for (int ix = 0; ix < patternSize.Width; ix++)
+			{
+				flatCvImageCorners[iy * patternSize.Width * 2 + ix * 2 + 0, 0] = split[0][iy * patternSize.Width + ix, 0];
+				flatCvImageCorners[iy * patternSize.Width * 2 + ix * 2 + 1, 0] = split[1][iy * patternSize.Width + ix, 0];
+			}
+		}
 
-		/*Matrix<float> cvIntrinsicParams2 = new Matrix<float>(3, 3);
-		Matrix<float> cvDistortionParams2 = new Matrix<float>(4, 1);
-		Matrix<float> cvImageCorners2 = new Matrix<float>(patternSize.Height * patternSize.Width, 2);
-		Matrix<float> cvWorldCorners2 = new Matrix<float>(patternSize.Height * patternSize.Width, 3);
-		Matrix<float> tempRotation = new Matrix<float>(3, 1);
-		Matrix<float> translationMatrix = new Matrix<float>(3, 1);*/
+		// Initialize intrinsic parameters
+		cvIntrinsicParams = new Matrix<float>(3, 3, 1);
+		cvIntrinsicParams[0, 0] = 1.2306403943428504e+03F;
+		cvIntrinsicParams[0, 1] = 0;
+		cvIntrinsicParams[0, 2] = 640;
+		cvIntrinsicParams[1, 0] = 0;
+		cvIntrinsicParams[1, 1] = 1.2306403943428504e+03F;
+		cvIntrinsicParams[1, 2] = 480;
+		cvIntrinsicParams[2, 0] = 0;
+		cvIntrinsicParams[2, 1] = 0;
+		cvIntrinsicParams[2, 2] = 1;
+
+		cvDistortionParams = new Matrix<float>(4, 1, 1);
+		cvDistortionParams[0, 0] = 1.9920531921963049e-02F;
+		cvDistortionParams[1, 0] = 3.2143454945024297e-02F;
+		cvDistortionParams[2, 0] = 0;
+		cvDistortionParams[3, 0] = 0;
 
 		// Compute the rotation / translation of the chessboard (the cameras extrinsic pramaters)
-		CvInvoke.SolvePnP(cvWorldCorners, cvImageCorners, cvIntrinsicParams, cvDistortionParams, tempRotation, translationMatrix);
+		Matrix<float> tempRotation = new Matrix<float>(3, 1, 1);
+		Matrix<float> translationMatrix = new Matrix<float>(3, 1, 1);
+		CvInvoke.SolvePnP(flatCvWorldCorners, cvImageCorners, cvIntrinsicParams, cvDistortionParams, tempRotation, translationMatrix);
 
 		// Converte the rotation from 3 axis rotations into a rotation matrix.
-		Matrix<float> rotationMatrix = new Matrix<float>(3, 3);
+		Matrix<float> rotationMatrix = new Matrix<float>(3, 3, 1);
 		CvInvoke.Rodrigues(tempRotation, rotationMatrix);
+		
 
 		// Turn the intrinsic and extrinsic pramaters into the projection and model/view matrix
 		/*Matrix4x4 projection = new Matrix4x4();
