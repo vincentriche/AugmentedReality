@@ -51,8 +51,8 @@ public class CheckerboardDetection : MonoBehaviour
 		}
 
 		// Set target scale
-		target.transform.localScale = new Vector3(patternScale * (patternSize.Width + 1), patternScale * (patternSize.Height + 1), 1.0f);
 		patternSize = new Size((int)pattern.x, (int)pattern.y);
+		target.transform.localScale = new Vector3(patternScale * (patternSize.Width + 1), patternScale * (patternSize.Height + 1), 1.0f);
 
 		// Construct world corner points
 		Vector2 offset = new Vector2(patternSize.Width / 2.0f * patternScale, patternSize.Height / 2.0f * patternScale);
