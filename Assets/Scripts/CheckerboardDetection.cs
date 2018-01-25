@@ -22,7 +22,9 @@ public class CheckerboardDetection : MonoBehaviour
 	public Camera targetCamera;
 	public GameObject target;
 	public float patternScale = 1.0f;
-	private Size patternSize = new Size(7, 4);
+	public Vector2 pattern = new Vector2(7, 4);
+	public Vector2 requestedResolution = new Vector2(640, 480);
+	private Size patternSize;
 	private MCvTermCriteria criteria = new MCvTermCriteria(100, 1e-5);
 	public static WebCamTexture webcamTexture;
 	private static Texture2D displayTexture;
@@ -44,12 +46,13 @@ public class CheckerboardDetection : MonoBehaviour
 
 		if (cameraCount > 0)
 		{
-			webcamTexture = new WebCamTexture(devices[camNumber].name);
+			webcamTexture = new WebCamTexture(devices[camNumber].name, (int)requestedResolution.x, (int)requestedResolution.y, 60);
 			webcamTexture.Play();
 		}
 
 		// Set target scale
 		target.transform.localScale = new Vector3(patternScale * (patternSize.Width + 1), patternScale * (patternSize.Height + 1), 1.0f);
+		patternSize = new Size((int)pattern.x, (int)pattern.y);
 
 		// Construct world corner points
 		Vector2 offset = new Vector2(patternSize.Width / 2.0f * patternScale, patternSize.Height / 2.0f * patternScale);
