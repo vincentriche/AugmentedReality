@@ -21,6 +21,7 @@ public class CheckerboardDetection : MonoBehaviour
 	public int camNumber = 0;
 	public Camera targetCamera;
 	public GameObject target;
+	public GameObject checkboard;
 	public float patternScale = 1.0f;
 	public Vector2 pattern = new Vector2(7, 4);
 	public Vector2 requestedResolution = new Vector2(640, 480);
@@ -32,7 +33,7 @@ public class CheckerboardDetection : MonoBehaviour
 	private byte[] bytes;
 	private byte[] grayBytes;
 	private FlipType flip = FlipType.None;
-	
+
 	private Matrix<float> cvImageCorners;
 	private Matrix<double> cvWorldCorners;
 	private Matrix<double> cvIntrinsicParams;
@@ -52,7 +53,7 @@ public class CheckerboardDetection : MonoBehaviour
 
 		// Set target scale
 		patternSize = new Size((int)pattern.x, (int)pattern.y);
-		target.transform.localScale = new Vector3(patternScale * (patternSize.Width + 1), patternScale * (patternSize.Height + 1), 1.0f);
+		checkboard.transform.localScale = new Vector3(patternScale * (patternSize.Width + 1), patternScale * (patternSize.Height + 1), 1.0f);
 
 		// Construct world corner points
 		Vector2 offset = new Vector2(patternSize.Width / 2.0f * patternScale, patternSize.Height / 2.0f * patternScale);
@@ -117,7 +118,7 @@ public class CheckerboardDetection : MonoBehaviour
 
 			CvInvoke.CvtColor(currentWebcamMat, resultMat, ColorConversion.Bgra2Bgr);
 			CvInvoke.CvtColor(resultMat, grayMat, ColorConversion.Bgra2Gray);
-			
+
 			cvImageCorners = new Matrix<float>(patternSize.Width * patternSize.Height, 1, 2);
 			bool detected = DetectCheckerboard(grayMat, resultMat);
 			if (detected == true)
@@ -152,7 +153,7 @@ public class CheckerboardDetection : MonoBehaviour
 			return false;
 
 		CvInvoke.CornerSubPix(detectImage, cvImageCorners, new Size(5, 5), new Size(-1, -1), criteria);
-		
+
 		if (drawImage != null)
 			CvInvoke.DrawChessboardCorners(drawImage, patternSize, cvImageCorners, true);
 
@@ -180,13 +181,6 @@ public class CheckerboardDetection : MonoBehaviour
 			return;
 
 		// Converte the rotation from 3 axis rotations into a rotation matrix.
-		double[] tempRotationData = new double[3];
-		Marshal.Copy(tempRotation.DataPointer, tempRotationData, 0, tempRotation.Width * tempRotation.Height);
-		tempRotationData[0] = tempRotationData[0];
-		tempRotationData[1] = -tempRotationData[1];
-		tempRotationData[2] = -tempRotationData[2];
-		GCHandle tempHandle = GCHandle.Alloc(tempRotationData, GCHandleType.Pinned);
-		tempRotation = new Mat(3, 1, DepthType.Cv64F, 1, tempHandle.AddrOfPinnedObject(), sizeof(double));
 		Mat rotationMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
 		CvInvoke.Rodrigues(tempRotation, rotationMatrix);
 
@@ -242,118 +236,96 @@ public class CheckerboardDetection : MonoBehaviour
 		cvModelView.m13 = (float)translationData[1];
 		cvModelView.m23 = (float)translationData[2];
 		cvModelView.m33 = 1;
-		cvModelView = cvModelView.inverse;
+		//cvModelView = cvModelView.inverse;
 
-		/*Vector3 camPos = Vector3.zero;
-		Quaternion camRot = Quaternion.identity;
-		ExtractCameraTRS(cvModelView, out camPos, out camRot);*/
-		//cvModelView = InvertModelView(cvModelView);
-		targetCamera.transform.position = ExtractPositionOpenCV(cvModelView);
-		targetCamera.transform.rotation = ExtractRotationOpenCV(cvModelView);
+		Vector3 position = ExtractPosition(cvModelView);
+		Quaternion rotation = ExtractRotation(cvModelView) * Quaternion.AngleAxis(180, Vector3.forward);
+		Matrix4x4 corrected = BuildCorrectedMatrix(position, rotation);
+
+		//corrected = corrected.inverse;
+		target.transform.position = ExtractPosition(corrected);
+		target.transform.rotation = ExtractRotation(corrected);
 	}
 
-	public Quaternion ExtractRotationOpenCV(Matrix4x4 matrix)
+	public Matrix4x4 BuildCorrectedMatrix(Vector3 pos, Quaternion rot)
+	{
+		Matrix4x4 rotM = Matrix44FromQuat(rot);
+
+		Matrix4x4 res = new Matrix4x4();
+		res.m00 = rotM.m00;
+		res.m10 = rotM.m10;
+		res.m20 = rotM.m20;
+		res.m30 = 0;
+
+		res.m01 = rotM.m01;
+		res.m11 = -rotM.m11;
+		res.m21 = rotM.m21;
+		res.m31 = 0;
+
+		res.m02 = rotM.m02;
+		res.m12 = rotM.m12;
+		res.m22 = rotM.m22;
+		res.m32 = 0;
+
+		res.m03 = pos.x;
+		res.m13 = pos.y;
+		res.m23 = pos.z;
+		res.m33 = 1;
+
+		return res;
+	}
+
+	public Matrix4x4 Matrix44FromQuat(Quaternion q)
+	{
+		Matrix4x4 m = Matrix4x4.identity;
+		float q00 = 2.0f * q[0] * q[0];
+		float q11 = 2.0f * q[1] * q[1];
+		float q22 = 2.0f * q[2] * q[2];
+		float q01 = 2.0f * q[0] * q[1];
+		float q02 = 2.0f * q[0] * q[2];
+		float q03 = 2.0f * q[0] * q[3];
+
+		float q12 = 2.0f * q[1] * q[2];
+		float q13 = 2.0f * q[1] * q[3];
+
+		float q23 = 2.0f * q[2] * q[3];
+
+		m.m00 = 1.0f - q11 - q22;
+		m.m10 = q01 - q23;
+		m.m20 = q02 + q13;
+
+		m.m01 = q01 + q23;
+		m.m11 = 1.0f - q22 - q00;
+		m.m21 = q12 - q03;
+
+		m.m02 = q02 - q13;
+		m.m12 = q12 + q03;
+		m.m22 = 1.0f - q11 - q00;
+
+		return m;
+	}
+
+	public Quaternion ExtractRotation(Matrix4x4 matrix)
 	{
 		Vector3 forward;
 		forward.x = matrix.m02;
-		forward.y = -matrix.m12;
+		forward.y = matrix.m12;
 		forward.z = matrix.m22;
 
 		Vector3 upwards;
 		upwards.x = matrix.m01;
-		upwards.y = -matrix.m11;
+		upwards.y = matrix.m11;
 		upwards.z = matrix.m21;
 
 		return Quaternion.LookRotation(forward, upwards);
 	}
 
-	public Vector3 ExtractPositionOpenCV(Matrix4x4 matrix)
+	public Vector3 ExtractPosition(Matrix4x4 matrix)
 	{
 		Vector3 position;
 		position.x = matrix.m03;
-		position.y = -matrix.m13;
+		position.y = matrix.m13;
 		position.z = matrix.m23;
 		return position;
-	}
-
-	/*public void ExtractCameraTRS(Matrix4x4 matrix, out Vector3 pos, out Quaternion rot)
-	{
-		Matrix4x4 rotation = matrix;
-		rotation.m03 = 0;
-		rotation.m13 = 0;
-		rotation.m23 = 0;
-		rotation = rotation.transpose;
-		Vector4 temp = rotation.GetRow(1);
-		rotation.SetRow(1, rotation.GetRow(2));
-		rotation.SetRow(2, temp);
-
-		Vector3 forward;
-		forward.x = rotation.m02;
-		forward.y = rotation.m12;
-		forward.z = rotation.m22;
-		Vector3 upwards;
-		upwards.x = rotation.m01;
-		upwards.y = rotation.m11;
-		upwards.z = rotation.m21;
-		rot = Quaternion.LookRotation(forward, upwards);
-		rot = rot * Quaternion.AngleAxis(90, Vector3.right);
-		rotation = Matrix4x4.TRS(Vector3.zero, rot, Vector3.one);
-
-		Vector3 position;
-		position.x = matrix.m03;
-		position.y = matrix.m13;
-		position.z = matrix.m23;
-
-		Matrix4x4 negativeMatrix = Matrix4x4.identity;
-		negativeMatrix.m00 = -1;
-		negativeMatrix.m11 = -1;
-		negativeMatrix.m22 = -1;
-		negativeMatrix.m33 = -1;
-		pos = negativeMatrix * rotation * position;
-	}*/
-
-	public Matrix4x4 InvertModelView(Matrix4x4 matrix)
-	{
-		Matrix4x4 negativeMatrix = Matrix4x4.identity;
-		negativeMatrix.m00 = -1;
-		negativeMatrix.m11 = -1;
-		negativeMatrix.m22 = -1;
-		negativeMatrix.m33 = -1;
-
-		Matrix4x4 rotation = matrix;
-		rotation.m03 = 0;
-		rotation.m13 = 0;
-		rotation.m23 = 0;
-		rotation = rotation.transpose;
-
-		Vector3 position;
-		position.x = matrix.m03;
-		position.y = matrix.m13;
-		position.z = matrix.m23;
-		position = (negativeMatrix * rotation) * position;
-
-		Matrix4x4 result;
-		result.m00 = rotation.m00;
-		result.m10 = rotation.m10;
-		result.m20 = rotation.m20;
-		result.m30 = 0;
-
-		result.m01 = rotation.m01;
-		result.m11 = rotation.m11;
-		result.m21 = rotation.m21;
-		result.m31 = 0;
-
-		result.m02 = rotation.m02;
-		result.m12 = rotation.m12;
-		result.m22 = rotation.m22;
-		result.m32 = 0;
-
-		result.m03 = position.x;
-		result.m13 = position.y;
-		result.m23 = position.z;
-		result.m33 = 1;
-		return result;
-
-		//return matrix.inverse;
 	}
 }
